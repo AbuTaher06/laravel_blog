@@ -5,8 +5,10 @@
 Run the following commands:
 
 ```bash
-composer create-project --prefer-dist laravel/laravel TaskManager
-cd TaskManager
+composer create-project --prefer-dist laravel/laravel Laravelblog
+
+cd Laravelblog
+
 composer require laravel/sanctum
 php artisan vendor:publish --provider="Laravel\Sanctum\SanctumServiceProvider"
 php artisan migrate
@@ -384,6 +386,305 @@ Use Postman or any API testing tool to test the endpoints:
 
 
 
-# Step 8: Using web routes
+# 🚀 Laravel Blog System: Custom Login & Registration
+
+Let's build a custom authentication system without using Laravel Breeze or Jetstream. This includes:
+
+- ✅ User Registration
+- ✅ User Login
+- ✅ User Logout
+- ✅ Password Hashing & Session Handling
+- ✅ Protecting Routes with Custom Middleware
+
+---
+
+## 📌 1. Create Custom Authentication Middleware
+
+Run the following command to generate middleware:
+
+```bash
+php artisan make:middleware AuthMiddleware
+```
+
+This creates a file: `app/Http/Middleware/AuthMiddleware.php`.
+
+---
+
+## 📌 2. Implement Logic in AuthMiddleware.php
+
+Modify `app/Http/Middleware/AuthMiddleware.php`:
+
+```php
+namespace App\Http\Middleware;
+
+use Closure;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+
+class AuthMiddleware
+{
+    public function handle(Request $request, Closure $next)
+    {
+        if (!Auth::check()) {
+            return redirect()->route('login')->with('error', 'You must be logged in to access this page.');
+        }
+        return $next($request);
+    }
+}
+```
+
+---
+
+## 📌 3. Register Middleware in Kernel.php
+
+Add the middleware to the global middleware list in `app/Http/Kernel.php` inside the `$routeMiddleware` array:
+
+```php
+protected $routeMiddleware = [
+    // Default middleware
+    'auth.middleware' => \App\Http\Middleware\AuthMiddleware::class,
+];
+```
+
+---
+
+## 📌 4. Set Up the User Model & Migration
+
+Laravel includes a User model and migration by default. To ensure authentication works properly, update the migration file located at `database/migrations/xxxx_xx_xx_create_users_table.php`:
+
+```php
+public function up()
+{
+    Schema::create('users', function (Blueprint $table) {
+        $table->id();
+        $table->string('name');
+        $table->string('email')->unique();
+        $table->string('password');
+        $table->timestamps();
+    });
+}
+```
+
+Now, migrate the database:
+
+```bash
+php artisan migrate
+```
+
+---
+
+## 📌 5. Create Authentication Routes (routes/web.php)
+
+Add routes for register, login, logout, and protect other routes with middleware:
+
+```php
+use App\Http\Controllers\AuthController;
+use Illuminate\Support\Facades\Route;
+
+// Show Login & Register Forms
+Route::get('/register', [AuthController::class, 'showRegister'])->name('register.form');
+Route::get('/login', [AuthController::class, 'showLogin'])->name('login.form');
+
+// Handle Registration & Login
+Route::post('/register', [AuthController::class, 'register'])->name('register');
+Route::post('/login', [AuthController::class, 'login'])->name('login');
+
+// Logout
+Route::get('/logout', [AuthController::class, 'logout'])->name('logout');
+
+// Protect routes using custom middleware
+Route::middleware(['auth.middleware'])->group(function () {
+    Route::get('/dashboard', function () {
+        return view('dashboard');
+    })->name('dashboard');
+});
+```
+
+---
+
+## 📌 6. Create AuthController.php
+
+Generate a new controller:
+
+```bash
+php artisan make:controller AuthController
+```
+
+Now, modify `app/Http/Controllers/AuthController.php`:
+
+```php
+namespace App\Http\Controllers;
+
+use App\Models\User;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
+
+class AuthController extends Controller
+{
+    // Show Register Page
+    public function showRegister()
+    {
+        return view('auth.register');
+    }
+
+    // Show Login Page
+    public function showLogin()
+    {
+        return view('auth.login');
+    }
+
+    // Handle User Registration
+    public function register(Request $request)
+    {
+        $request->validate([
+            'name' => 'required',
+            'email' => 'required|email|unique:users',
+            'password' => 'required|min:6|confirmed',
+        ]);
+
+        User::create([
+            'name' => $request->name,
+            'email' => $request->email,
+            'password' => Hash::make($request->password),
+        ]);
+
+        return redirect()->route('login.form')->with('success', 'Registration successful! Please log in.');
+    }
+
+    // Handle User Login
+    public function login(Request $request)
+    {
+        $credentials = $request->validate([
+            'email' => 'required|email',
+            'password' => 'required',
+        ]);
+
+        if (Auth::attempt($credentials)) {
+            return redirect()->route('dashboard')->with('success', 'Login successful!');
+        }
+
+        return back()->with('error', 'Invalid login credentials.');
+    }
+
+    // Handle Logout
+    public function logout()
+    {
+        Auth::logout();
+        return redirect()->route('login.form')->with('success', 'Logged out successfully.');
+    }
+}
+```
+
+---
+
+## 📌 7. Create Views (resources/views/auth/)
+
+### 📝 7.1 Register Page (resources/views/auth/register.blade.php)
+
+```blade
+@extends('layouts.app')
+
+@section('content')
+<h2>Register</h2>
+
+@if(session('success'))
+    <div class="alert alert-success">{{ session('success') }}</div>
+@endif
+
+<form action="{{ route('register') }}" method="POST">
+    @csrf
+    <div class="mb-3">
+        <label>Name</label>
+        <input type="text" name="name" class="form-control">
+    </div>
+    <div class="mb-3">
+        <label>Email</label>
+        <input type="email" name="email" class="form-control">
+    </div>
+    <div class="mb-3">
+        <label>Password</label>
+        <input type="password" name="password" class="form-control">
+    </div>
+    <div class="mb-3">
+        <label>Confirm Password</label>
+        <input type="password" name="password_confirmation" class="form-control">
+    </div>
+    <button class="btn btn-primary">Register</button>
+</form>
+<a href="{{ route('login.form') }}">Already have an account? Login</a>
+@endsection
+```
+
+### 📝 7.2 Login Page (resources/views/auth/login.blade.php)
+
+```blade
+@extends('layouts.app')
+
+@section('content')
+<h2>Login</h2>
+
+@if(session('error'))
+    <div class="alert alert-danger">{{ session('error') }}</div>
+@endif
+
+@if(session('success'))
+    <div class="alert alert-success">{{ session('success') }}</div>
+@endif
+
+<form action="{{ route('login') }}" method="POST">
+    @csrf
+    <div class="mb-3">
+        <label>Email</label>
+        <input type="email" name="email" class="form-control">
+    </div>
+    <div class="mb-3">
+        <label>Password</label>
+        <input type="password" name="password" class="form-control">
+    </div>
+    <button class="btn btn-primary">Login</button>
+</form>
+<a href="{{ route('register.form') }}">Don't have an account? Register</a>
+@endsection
+```
+
+---
+
+## 📌 8. Modify Navigation Bar (resources/views/layouts/app.blade.php)
+
+Update the navigation bar to show login/register/logout options dynamically:
+
+```blade
+<nav class="navbar navbar-dark bg-dark">
+    <div class="container">
+        <a class="navbar-brand" href="{{ route('home') }}">Blog</a>
+        <div>
+            @auth
+                <a href="{{ route('dashboard') }}" class="btn btn-primary">Dashboard</a>
+                <a href="{{ route('logout') }}" class="btn btn-danger">Logout</a>
+            @else
+                <a href="{{ route('login.form') }}" class="btn btn-light">Login</a>
+                <a href="{{ route('register.form') }}" class="btn btn-light">Register</a>
+            @endauth
+        </div>
+    </div>
+</nav>
+```
+
+---
+
+## 📌 9. Protect Routes Using Custom Middleware
+
+Apply middleware to protected routes in `web.php`:
+
+```php
+Route::middleware(['auth.middleware'])->group(function () {
+    Route::get('/dashboard', function () {
+        return view('dashboard');
+    })->name('dashboard');
+});
+```
+
+---
 
 
